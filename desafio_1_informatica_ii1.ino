@@ -1,6 +1,6 @@
 #include <LiquidCrystal.h>
 
-// Define los pines según tu conexión
+// Definir los pines según tu conexión
 const int rs = 12;      // Sección de Registro (RS)
 const int enable = 11;  // Activar (Enable)
 const int d4 = 5;       // Pin DB4
@@ -11,142 +11,215 @@ int generador = A0;
 int pulsador1 = 6;
 int pulsador2 = 7;
 
-//variable booleana para saber el estado de los pulsadores
+// Variable booleana para saber el estado de los pulsadores
 bool mostrarDatos = false;
 
 int *arreglo = nullptr;
 int tamArreglo = 0;
-
-//arreglo = new int[tamArreglo];
-
-//guardarDatos(tamArreglo, arreglo);
-
-
+int capacidad = 10;  // Inicializar capacidad del arreglo
 
 // Inicializa el objeto lcd con los pines definidos
 LiquidCrystal lcd(rs, enable, d4, d5, d6, d7);
 
 void setup() {
-  pinMode(pulsador1, INPUT);
-  pinMode(pulsador2, INPUT);
+    pinMode(pulsador1, INPUT);
+    pinMode(pulsador2, INPUT);
 
-  lcd.begin(16, 2);          // Inicializa una pantalla LCD de 16x2
-  lcd.print("Hola Mundo!");  // Muestra "Hola Mundo!" en la LCD
-  Serial.begin(9600);
+    lcd.begin(16, 2);          // Inicializa una pantalla LCD de 16x 
+    Serial.begin(9600);
+
+    // Inicializa el arreglo
+    arreglo = new int[capacidad];
 }
 
 void loop() {
+    // Lee los estados de los pulsadores
+    int estadoPulsador1 = digitalRead(pulsador1);
+    int estadoPulsador2 = digitalRead(pulsador2);
 
-  // Lee los estados de los pulsadores
-  int estadoPulsador1 = digitalRead(pulsador1);
-  int estadoPulsador2 = digitalRead(pulsador2);
+    // Activar y desactivar la bandera para mostrar datos
+    if (estadoPulsador1 == HIGH) {
+        mostrarDatos = true;
 
-  //ACTIVAR Y DESACTIVAR VALOR BOOLEANO
-
-  // Si el pulsador 1 es presionado, activa la bandera para mostrar datos
-  if (estadoPulsador1 == HIGH) {
-    mostrarDatos = true;
-  }
-	
-  // Si el pulsador 2 es presionado, desactiva la bandera para dejar de mostrar datos
-  else if (estadoPulsador2 == HIGH) {
-    mostrarDatos = false;
-  }
-
-
-  int valorGenerador = analogRead(generador);
-
-
-  //llamamos a la funcion guardarDatos
-  arreglo = new int[tamArreglo];
-  guardarDatos(tamArreglo, arreglo, valorGenerador);
-  mostrar();
-
-	
-	
-  
-}
-
-void guardarDatos(int &tamArreglo, int *&arreglo, int valorGenerador) {
-    
-	int capacidad = 10; // Inicializar capacidad
-    int *nuevoArreglo = nullptr; // Inicializar el nuevo arreglo
-
-    // Si arreglo es nulo, inicialízalo
-    if (arreglo == nullptr) {
-        arreglo = new int[capacidad];
-        tamArreglo = 0; // Inicialmente el tamaño es 0
+    } else if (estadoPulsador2 == HIGH) {
+        mostrarDatos = false;
     }
 
-    // Si el arreglo está lleno, expandimos la memoria
-    if (tamArreglo >= capacidad) {
-        // Aumentamos la capacidad
-        capacidad *= 2;
-        nuevoArreglo = new int[capacidad];
+    // Llamamos a la función para manejar el almacenamiento de datos
+    manejarDatos();
 
-        // Copiamos los datos antiguos al nuevo arreglo
-        for (int i = 0; i < tamArreglo; i++) {
-            nuevoArreglo[i] = arreglo[i];
+    // Espera un poco para no llenar el buffer serial demasiado rápido
+    delay(50);
+    mostrar();
+}
+
+void manejarDatos() {
+    if (mostrarDatos) {
+        int valorGenerador = analogRead(generador);
+
+        // Expandir el arreglo si es necesario
+        if (tamArreglo >= capacidad) {
+            capacidad *= 2;
+            int *nuevoArreglo = new int[capacidad];
+
+            // Copiar datos antiguos al nuevo arreglo
+            for (int i = 0; i < tamArreglo; i++) {
+                nuevoArreglo[i] = arreglo[i];
+            }
+
+            // Liberar la memoria antigua
+            delete[] arreglo;
+
+            // Actualizar el puntero al nuevo arreglo
+            arreglo = nuevoArreglo;
         }
 
-        // Liberamos la memoria antigua
-        delete[] arreglo;
+        // Guardar el valor del generador en el arreglo
+        arreglo[tamArreglo] = valorGenerador;
+        tamArreglo++;
 
-        // Actualizamos el puntero al nuevo arreglo
-        arreglo = nuevoArreglo;
+        // Imprimir datos en el puerto serial
+        Serial.println(valorGenerador);
+
+		lcd.clear();
+		lcd.print("Tomando");
+		lcd.setCursor(0, 1);
+		lcd.print("datos");
+		delay(5000);
+
     }
-
-    // Guardamos el valor del generador en el arreglo
-    arreglo[tamArreglo] = valorGenerador;
-    tamArreglo++;
-
-    // Continúa expandiendo si es necesario
-    while (mostrarDatos) {
-		Serial.println(valorGenerador);
-        // No es necesario hacer nada dentro del while porque el ciclo de expansión ya está manejado arriba
-    }
-
 }
+
+void cleanup() {
+    // Liberar memoria al final del uso
+    delete[] arreglo;
+}
+
 void mostrar() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
+    lcd.clear();
+    lcd.setCursor(1, 0);
+    int amplitud = calcularAmplitud(arreglo, tamArreglo);
 
-  // Llamada a la función para calcular frecuencia
-  //int frecuencia = calcularFrecuencia(arreglo, tamArreglo);
+    // Mostrar los resultados en la pantalla LCD
+    lcd.print(" Amp: ");
+    lcd.print(amplitud);
 
-  // Llamada a la función para calcular la amplitud
-  int amplitud = calcularAmplitud(arreglo, tamArreglo);
-
-  // Llamada a la función para determinar el tipo de onda
-  //String tipoOnda = identificarOnda(arreglo, tamArreglo);
-
-  // Mostrar los resultados en la pantalla LCD
-  lcd.print("Frecu: ");
-  //lcd.print(frecuencia);
-  lcd.setCursor(0, 1);
-  lcd.print("Ampli: ");
-  lcd.print(amplitud);
-
-  // Muestra el tipo de onda en el Serial Monitor
-  lcd.setCursor(1,0);
-  lcd.print("Tipo de onda: ");
-  //Serial.println(tipoOnda);
+    // Identificar el tipo de onda
+    almacenarSegmentoYCalcularUmbral();
+    delay(2000);
 }
 
 int calcularAmplitud(int *arreglo, int tamArreglo) {
-  int valorMax = arreglo[0];
-  int valorMin = arreglo[0];
+    int valorMax = arreglo[0];
+    int valorMin = arreglo[0];
 
-  for (int i = 1; i < tamArreglo; i++) {
-    if (arreglo[i] > valorMax) {
-      valorMax = arreglo[i];
+    for (int i = 1; i < tamArreglo; i++) {
+        if (arreglo[i] > valorMax) {
+            valorMax = arreglo[i];
+        }
+        if (arreglo[i] < valorMin) {
+            valorMin = arreglo[i];
+        }
     }
-    if (arreglo[i] < valorMin) {
-      valorMin = arreglo[i];
-    }
-  }
 
-  // Amplitud es la diferencia entre el valor máximo y el valor mínimo
-  int amplitud = valorMax - valorMin;
-  return amplitud;
+    // Amplitud es la diferencia entre el valor máximo y el valor mínimo
+    return valorMax - valorMin;
+}
+
+void almacenarSegmentoYCalcularUmbral() {
+    int tamBloque = 20;  // Tamaño del bloque
+    for (int i = 0; i < tamArreglo; i += tamBloque) {
+        int finBloque = min(i + tamBloque, tamArreglo);  // Asegurarse de no pasar el límite del arreglo
+
+        // Calcular la media (umbral) del bloque
+        int suma = 0;
+        for (int j = i; j < finBloque; j++) {
+            suma += arreglo[j];
+        }
+
+        int umbral = suma / (finBloque - i);
+        Serial.print("Umbral del bloque ");
+        Serial.print(i / tamBloque);
+        Serial.print(": ");
+        Serial.println(umbral);
+
+        // Comparar los valores del bloque con el umbral para identificar el tipo de señal
+        identificarTipoSenal(i, finBloque, umbral);
+    }
+}
+
+void identificarTipoSenal(int inicio, int fin, int umbral) {
+    bool esCuadrada = false;
+
+    // Variables para detectar cambios de pendiente lineal
+    for (int i = inicio + 1; i < fin; i++) {
+        int diff = arreglo[i] - arreglo[i - 1];
+
+        // Si la diferencia es mayor al umbral, es cuadrada
+        if (abs(diff) > umbral) {
+            esCuadrada = true;
+            lcd.clear();
+            lcd.print("S. Cuadrada");
+            delay(10000);
+            return;
+        }
+    }
+
+    // Si no es cuadrada, comprobar si es senoidal
+    if (esSenoidal(arreglo + inicio, fin - inicio, umbral)) {
+        lcd.clear();
+        lcd.print("S. Senoidal");
+        delay(5000);
+        return;
+    }
+
+    // Si no es cuadrada ni senoidal, es triangular
+    lcd.clear();
+    lcd.print("S. Triangular");
+    delay(10000);
+}
+
+bool esSenoidal(int *segmento, int tamanoSegmento, int umbral) {
+    float desfase = calcularDesfase(segmento, tamanoSegmento, umbral);
+
+    if (desfase < 0) {
+        return false;
+    }
+
+    // Revisar los cambios en el segmento para confirmar que sean suaves
+    for (int i = 1; i < tamanoSegmento - 1; i++) {
+        int diff1 = segmento[i] - segmento[i - 1];
+        int diff2 = segmento[i + 1] - segmento[i];
+
+        if (abs(diff1 - diff2) > umbral) {
+            return false;  // No es senoidal si los cambios son bruscos
+        }
+    }
+
+    // Si el desfase es consistente y los cambios son suaves, es senoidal
+    return true;
+}
+
+float calcularDesfase(int *segmento, int tamanoSegmento, int valorMedio) {
+    int primerCruce = -1;
+    int segundoCruce = -1;
+
+    for (int i = 1; i < tamanoSegmento; i++) {
+        if ((segmento[i - 1] < valorMedio && segmento[i] >= valorMedio) ||
+            (segmento[i - 1] > valorMedio && segmento[i] <= valorMedio)) {
+            if (primerCruce == -1) {
+                primerCruce = i;
+            } else if (segundoCruce == -1) {
+                segundoCruce = i;
+                break;
+            }
+        }
+    }
+
+    if (primerCruce != -1 && segundoCruce != -1) {
+        float periodo = (float)(segundoCruce - primerCruce);
+        return periodo;
+    } else {
+        return -1.0;
+    }
 }
