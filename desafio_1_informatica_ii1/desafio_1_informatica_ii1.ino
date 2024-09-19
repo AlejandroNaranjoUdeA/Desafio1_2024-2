@@ -1,6 +1,6 @@
 #include <LiquidCrystal.h>
 
-// Define los pines según tu conexión
+// Definir los pines según tu conexión
 const int rs = 12;      // Sección de Registro (RS)
 const int enable = 11;  // Activar (Enable)
 const int d4 = 5;       // Pin DB4
@@ -25,8 +25,7 @@ void setup() {
     pinMode(pulsador1, INPUT);
     pinMode(pulsador2, INPUT);
 
-    lcd.begin(16, 2);          // Inicializa una pantalla LCD de 16x2
-    lcd.print("Hola Mundo!");  // Muestra "Hola Mundo!" en la LCD
+    lcd.begin(16, 2);          // Inicializa una pantalla LCD de 16x 
     Serial.begin(9600);
 
     // Inicializa el arreglo
@@ -49,13 +48,8 @@ void loop() {
     // Llamamos a la función para manejar el almacenamiento de datos
     manejarDatos();
 
-
     // Espera un poco para no llenar el buffer serial demasiado rápido
     delay(50);
-    mostrar();
-
-    // Llamamos a la funcion para manejar las senales
-    analizarFuncion();
 }
 
 void manejarDatos() {
@@ -85,9 +79,15 @@ void manejarDatos() {
 
         // Imprimir datos en el puerto serial
         Serial.println(valorGenerador);
+
+		lcd.clear();
+		lcd.print("Tomando");
+		lcd.setCursor(0, 1);
+		lcd.print("datos");
+		delay(5000);
+
     }
 }
-
 
 void cleanup() {
     // Liberar memoria al final del uso
@@ -96,28 +96,23 @@ void cleanup() {
 
 void mostrar() {
     lcd.clear();
-    lcd.setCursor(0, 0);
-    // Llamada a la función para calcular frecuencia
-    //int frecuencia = calcularFrecuencia(arreglo, tamArreglo);
-    // Llamada a la función para calcular la amplitud
+    lcd.setCursor(1, 0);
     int amplitud = calcularAmplitud(arreglo, tamArreglo);
-
-    // Llamada a la función para determinar el tipo de onda
-    //String tipoOnda = identificarOnda(arreglo, tamArreglo);
+    float frecuensia= calcularFrecuencia(int *segmento, int tamanoSegmento, 5000);
 
     // Mostrar los resultados en la pantalla LCD
-    lcd.print("Frecu: ");
-    //lcd.print(frecuencia);
-    lcd.setCursor(0, 1);
-    lcd.print("Ampli: ");
+    lcd.print(" Amp: ");
     lcd.print(amplitud);
 
-    // Muestra el tipo de onda en el Serial Monitor
-    //lcd.setCursor(1,0);
-    //lcd.print("Tipo de onda: ");
-    //Serial.println(tipoOnda);
-}
+	lcd.print(" Fr: ");
+  	lcd.print(frecuensia);
 
+	
+
+    // Identificar el tipo de onda
+    almacenarSegmentoYCalcularUmbral();
+    delay(2000);
+}
 int calcularAmplitud(int *arreglo, int tamArreglo) {
     int valorMax = arreglo[0];
     int valorMin = arreglo[0];
@@ -132,87 +127,138 @@ int calcularAmplitud(int *arreglo, int tamArreglo) {
     }
 
     // Amplitud es la diferencia entre el valor máximo y el valor mínimo
-    int amplitud = valorMax - valorMin;
-    return amplitud;
+    return valorMax - valorMin;
 }
-//ahora necesitamos sabemos como es la senal, si es triangular, cuadrada o senosoidal
 
-//para la funcion cuadrada, los cambios de valores son muy bruscos,
-//mientras que para la triangular son mas suaves
+void almacenarSegmentoYCalcularUmbral() {
+    int tamBloque = 20;  // Tamaño del bloque
+    for (int i = 0; i < tamArreglo; i += tamBloque) {
+        int finBloque = min(i + tamBloque, tamArreglo);  // Asegurarse de no pasar el límite del arreglo
 
-void analizarFuncion() {
-    if (mostrarDatos == false) {
-        // Variables para identificar la naturaleza de la señal
-        bool esCuadrada = true;
-        bool esSenoidal = true;
-        bool esTriangular = true;
-
-        // Itera sobre los datos recolectados
-        for (int i = 1; i < tamArreglo - 1; i++) {
-            int diff1 = arreglo[i] - arreglo[i - 1];
-            int diff2 = arreglo[i + 1] - arreglo[i];
-
-            // Verifica si es cuadrada (cambios abruptos)
-            if (abs(diff1) < 100 || abs(diff2) < 100) {
-                esCuadrada = false;
-            }
-
-            // Verifica si es senoidal (cambios suaves y continuos)
-            if (abs(diff1) > 50 || abs(diff2) > 50) {
-                esSenoidal = false;
-            }
-
-            // Verifica si es triangular (cambios lineales)
-            if (abs(diff1) != abs(diff2)) {
-                esTriangular = false;
-            }
+        // Calcular la media (umbral) del bloque
+        int suma = 0;
+        for (int j = i; j < finBloque; j++) {
+            suma += arreglo[j];
         }
 
-        // Mostrar el resultado en el puerto serial
-        if (esCuadrada) {
-            Serial.println("La senal es cuadrada.");
-        } else if (esSenoidal) {
-            Serial.println("La senal es senoidal.");
-        } else if (esTriangular) {
-            Serial.println("La senal es triangular.");
-        } else {
-            Serial.println("No se pudo determinar el tipo de senal.");
-        }
+        int umbral = suma / (finBloque - i);
+        Serial.print("Umbral del bloque ");
+        Serial.print(i / tamBloque);
+        Serial.print(": ");
+        Serial.println(umbral);
+
+        // Comparar los valores del bloque con el umbral para identificar el tipo de señal
+        identificarTipoSenal(i, finBloque, umbral);
     }
 }
-/*
-frecuencia cuando es cuadrada hipotesis
-int valorAnterior = 0;
-int valorActual = 0;
-unsigned long tiempoInicio = 0;
-int contadorCambios = 0;
-float frecuencia = 0;
 
-void setup() {
-  Serial.begin(9600);
-  tiempoInicio = millis();  // Inicializa el tiempo
+void identificarTipoSenal(int inicio, int fin, int umbral) {
+    bool esCuadrada = false;
+
+    // Variables para detectar cambios de pendiente lineal
+    for (int i = inicio + 1; i < fin; i++) {
+        int diff = arreglo[i] - arreglo[i - 1];
+
+        // Si la diferencia es mayor al umbral, es cuadrada
+        if (abs(diff) > umbral) {
+            esCuadrada = true;
+            lcd.clear();
+            lcd.print("S. Cuadrada");
+            delay(10000);
+            return;
+        }
+    }
+
+    // Si no es cuadrada, comprobar si es senoidal
+    if (esSenoidal(arreglo + inicio, fin - inicio, umbral)) {
+        lcd.clear();
+        lcd.print("S. Senoidal");
+        delay(5000);
+        return;
+    }
+
+    // Si no es cuadrada ni senoidal, es triangular
+    lcd.clear();
+    lcd.print("S. Triangular");
+    delay(10000);
+    mostrar();
 }
 
-void loop() {
-  // Leer el valor actual de la señal
-  valorActual = analogRead(pinGenerador);
+bool esSenoidal(int *segmento, int tamanoSegmento, int umbral) {
+    float desfase = calcularDesfase(segmento, tamanoSegmento, umbral);
 
-  // Detectar cambios de estado (para ondas cuadradas)
-  if ((valorAnterior < 512 && valorActual >= 512) || (valorAnterior >= 512 && valorActual < 512)) {
-    contadorCambios++;
-  }
+    if (desfase < 0) {
+        return false;
+    }
 
-  // Cada segundo, calcular la frecuencia
-  if (millis() - tiempoInicio >= 1000) {
-    frecuencia = contadorCambios / 2.0;  // Cada cambio equivale a medio ciclo de la onda cuadrada
-    Serial.print("Frecuencia de onda cuadrada (Hz): ");
-    Serial.println(frecuencia);
+    // Revisar los cambios en el segmento para confirmar que sean suaves
+    for (int i = 1; i < tamanoSegmento - 1; i++) {
+        int diff1 = segmento[i] - segmento[i - 1];
+        int diff2 = segmento[i + 1] - segmento[i];
 
-    // Reiniciar variables para el siguiente segundo
-    tiempoInicio = millis();
-    contadorCambios = 0;
-  }
+        if (abs(diff1 - diff2) > umbral) {
+            return false;  // No es senoidal si los cambios son bruscos
+        }
+    }
 
-  valorAnterior = valorActual;
+    // Si el desfase es consistente y los cambios son suaves, es senoidal
+    return true;
 }
-*/
+
+float calcularDesfase(int *segmento, int tamanoSegmento, int valorMedio) {
+    int primerCruce = -1;
+    int segundoCruce = -1;
+
+    for (int i = 1; i < tamanoSegmento; i++) {
+        if ((segmento[i - 1] < valorMedio && segmento[i] >= valorMedio) ||
+            (segmento[i - 1] > valorMedio && segmento[i] <= valorMedio)) {
+            if (primerCruce == -1) {
+                primerCruce = i;
+            } else if (segundoCruce == -1) {
+                segundoCruce = i;
+                break;
+            }
+        }
+    }
+
+    if (primerCruce != -1 && segundoCruce != -1) {
+        float periodo = (float)(segundoCruce - primerCruce);
+        return periodo;
+    } else {
+        return -1.0;
+    }
+}
+
+float calcularFrecuencia(int *segmento, int tamanoSegmento, float tiempoSegmento) {
+    // Contar los cruces por el valor medio
+    int cruces = contarCrucesPorValorMedio(segmento, tamanoSegmento);
+
+    // Si no hay suficientes cruces, no se puede calcular la frecuencia
+    if (cruces < 2) {
+        return -1.0;  // Retornar un valor especial indicando que no se pudo calcular la frecuencia
+    }
+
+    // Dividimos los cruces por 2 para obtener el número de ciclos completos
+    int ciclosCompletos = cruces / 2;
+
+    // Calcular la frecuencia (número de ciclos por segundo)
+    float frecuencia = ciclosCompletos / tiempoSegmento;
+
+    return frecuencia;
+}
+
+int contarCrucesPorValorMedio(int *segmento, int tamanoSegmento) {
+    float valorMedio = calcularValorMedio(segmento, tamanoSegmento);  // Calcular el valor medio del segmento
+    int cruces = 0;  // Contador de cruces por el valor medio
+
+    // Recorrer el segmento buscando cruces
+    for (int i = 1; i < tamanoSegmento; i++) {
+        // Detectar cruce por el valor medio
+        if ((segmento[i - 1] < valorMedio && segmento[i] >= valorMedio) || 
+            (segmento[i - 1] > valorMedio && segmento[i] <= valorMedio)) {
+            cruces++;  // Incrementar el contador de cruces cuando ocurre un cruce
+        }
+    }
+
+    return cruces;  // Retorna el número de cruces encontrados en el segmento
+}
